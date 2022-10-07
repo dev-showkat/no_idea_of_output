@@ -1,14 +1,14 @@
-import { Request, Response } from "express";
+import { Request, RequestHandler, Response } from "express";
 import bcrypt from "bcryptjs";
 import firebaseAdmin from "firebase-admin";
 import jwt from "jsonwebtoken";
-import multer from "multer";
-export const registerUser = async (req: Request, res: Response) => {
+import path from "path";
+import { unlink } from 'fs';
+
+export const registerUser: RequestHandler = async (req: Request, res: Response) => {
     const { username, email, password } = req.body;
-    const upload = multer();
-    upload.single('imgUrl');
-    
     try {
+        const avatar = req?.file?.filename || 'default-avatar.png';
         if (!username || !email || !password) {
             return res.status(400).json({
                 message: "invalid data"
@@ -22,34 +22,32 @@ export const registerUser = async (req: Request, res: Response) => {
             });
         }
         const salt: string = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-        const imgUrl = '';
+        const hashedPassword: string = await bcrypt.hash(password, salt);
         const userRef = await usersRef.add({
             username,
             email,
-            imgUrl,
+            avatar,
             password: hashedPassword,
             createdAt: Date.now(),
             updatedAt: Date.now()
         });
-        const userDoc = await userRef.get();
-        //Todo: get profile picture url
         const token = jwt.sign({ id: userRef.id, email }, process.env.JWT_SECRET_KEY as string, { expiresIn: '12h' });
         return res.status(201).json({
             token,
             id: userRef.id,
             username,
-            email
+            email,
+            avatar: path.join(__dirname, `../Avatars/${avatar}`)
         });
     } catch (error: any) {
-        console.log(error.message);
+        console.log(error?.message);
         return res.status(500).json({
             message: "something went wrong"
         });
     }
 }
 
-export const signinUser = async (req: Request, res: Response) => {
+export const signinUser: RequestHandler = async (req: Request, res: Response) => {
     const { email, password } = req.body;
     try {
         if (!email || !password) {
@@ -64,8 +62,8 @@ export const signinUser = async (req: Request, res: Response) => {
                 message: "invalid email address"
             });
         }
-        const userData = userDoc.docs[0].data()
-        const isPasswordCorrect = await bcrypt.compare(password, userData.password)
+        const userData = userDoc.docs[0].data();
+        const isPasswordCorrect = await bcrypt.compare(password.toString(), userData.password)
         if (!isPasswordCorrect) {
             return res.status(400).json({
                 message: "invalid password"
@@ -73,18 +71,20 @@ export const signinUser = async (req: Request, res: Response) => {
         }
         const token = jwt.sign({ id: userDoc.docs[0].id, email }, process.env.JWT_SECRET_KEY as string, { expiresIn: '12h' });
         return res.status(200).json({
-            token
+            token,
+            email: userData.email,
+            username: userData.username,
+            avatar: path.join(__dirname, `../Avatars/${userData.avatar}`)
         });
     } catch (error: any) {
-        console.log(error.message);
+        console.log(error?.message);
         return res.status(500).json({
             message: "something went wrong"
         });
     }
-
 }
 
-export const updateUser = async (req: any, res: Response) => {
+export const updateUser: RequestHandler = async (req: any, res: Response) => {
     const { email, username } = req.body;
     try {
         if (!email || !username || email !== req.user.email) {
@@ -92,18 +92,37 @@ export const updateUser = async (req: any, res: Response) => {
                 message: "email is required"
             });
         }
+        const newAvatar = req?.file?.filename;
         const userRef = firebaseAdmin.firestore().collection('users').doc(req.user.id);
-        await userRef.update({ username, updatedAt: Date.now() });
-        res.status(200).json({ email, username })
+        const userDoc = await userRef.get();
+        if (!userDoc.exists) {
+            return res.status(400).json({
+                message: "invalid email address"
+            });
+        }
+        const oldAvater = userDoc.data()?.avatar;
+        if (newAvatar && oldAvater !== 'default-avatar.png') {
+            const filePath = path.join(path.join(__dirname, `../Avatars/${oldAvater}`));
+            unlink(filePath, (err) => {
+                if (err) {
+                    console.error(err)
+                    return res.status(500).json({
+                        message: "something went wrong"
+                    });
+                }
+            })
+        }
+        await userRef.update({ username, avatar: newAvatar || oldAvater, updatedAt: Date.now() });
+        res.status(200).json({ email, username, avatar: path.join(__dirname, `../Avatars/${newAvatar || oldAvater}`) })
     } catch (error: any) {
-        console.log(error.message);
+        console.log(error?.message);
         return res.status(500).json({
             message: "something went wrong"
         });
     }
 }
 
-export const deleteUser = async (req: any, res: Response) => {
+export const deleteUser: RequestHandler = async (req: any, res: Response) => {
     const { email, password } = req.body;
     try {
         if (!email || !password || email !== req.user.email) {
@@ -123,7 +142,7 @@ export const deleteUser = async (req: any, res: Response) => {
         await userRef.delete();
         res.status(200).json({ message: "account deleted successfully" })
     } catch (error: any) {
-        console.log(error.message);
+        console.log(error?.message);
         return res.status(500).json({
             message: "something went wrong"
         });

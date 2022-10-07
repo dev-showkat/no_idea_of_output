@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import firebaseAdmin from "firebase-admin"
 
-export const createItem = async (req: Request, res: Response) => {
+export const createItem = async (req: any, res: Response) => {
     const { name } = req.body;
     try {
         if (!name) {
@@ -11,6 +11,7 @@ export const createItem = async (req: Request, res: Response) => {
         }
         const itemRef = await firebaseAdmin.firestore().collection('items').add({
             name,
+            createdBy: `${req.user.id}`,
             createdAt: Date.now(),
             updatedAt: Date.now(),
         })
@@ -23,18 +24,23 @@ export const createItem = async (req: Request, res: Response) => {
             }
         })
     } catch (error: any) {
-        console.log(error.message)
+        console.log(error?.message)
         return res.status(500).json({
             message: "something went wrong"
         })
     }
 }
 
-export const getItems = async (req: Request, res: Response) => {
+export const getItems = async (req: any, res: Response) => {
     let items: any[] = [];
     try {
         const itemsRef = firebaseAdmin.firestore().collection('items');
-        const snapshot = await itemsRef.get();
+        const snapshot = await itemsRef.where('createdBy', '==', req.user.id).get();
+        if (snapshot.empty) {
+            return res.status(200).json(
+                items
+            )
+        }
         snapshot.forEach(doc => {
             items.push({
                 id: doc.id,
@@ -46,7 +52,7 @@ export const getItems = async (req: Request, res: Response) => {
         )
     }
     catch (error: any) {
-        console.log(error.message)
+        console.log(error?.message)
         return res.status(500).json({
             message: "something went wrong"
         })
@@ -54,7 +60,7 @@ export const getItems = async (req: Request, res: Response) => {
 }
 
 
-export const updateItem = async (req: Request, res: Response) => {
+export const updateItem = async (req: any, res: Response) => {
     const { id } = req.params;
     const { name } = req.body;
     try {
@@ -65,9 +71,15 @@ export const updateItem = async (req: Request, res: Response) => {
         }
         const itemRef = firebaseAdmin.firestore().collection('items').doc(id);
         const doc = await itemRef.get();
-        if(!doc.exists){
+        if (!doc.exists) {
             return res.status(401).json({
                 message: "item not found"
+            })
+        }
+        const createdBy = doc.data()?.createdBy;
+        if (createdBy !== req.user.id) {
+            return res.status(201).json({
+                message: "item can't be updated",
             })
         }
         await itemRef.update({
@@ -83,16 +95,17 @@ export const updateItem = async (req: Request, res: Response) => {
             }
         })
     } catch (error: any) {
-        console.log(error.message)
+        console.log(error?.message)
         return res.status(500).json({
             message: "something went wrong"
         })
     }
 }
 
-export const deleteItem = async (req: Request, res: Response) => {
+export const deleteItem = async (req: any, res: Response) => {
     const { id } = req.params;
     try {
+        const userRef = firebaseAdmin.firestore().collection('users').doc(req.user.id);
         if (!id) {
             return res.status(400).json({
                 message: "invalid data"
@@ -100,9 +113,15 @@ export const deleteItem = async (req: Request, res: Response) => {
         }
         const itemRef = firebaseAdmin.firestore().collection('items').doc(id);
         const doc = await itemRef.get();
-        if(!doc.exists){
+        if (!doc.exists) {
             return res.status(404).json({
                 message: "item not found"
+            })
+        }
+        const createdBy = doc.data()?.createdBy;
+        if (createdBy !== req.user.id) {
+            return res.status(201).json({
+                message: "item can't be deleted",
             })
         }
         await itemRef.delete();
@@ -111,7 +130,7 @@ export const deleteItem = async (req: Request, res: Response) => {
             message: "item deleted successfully"
         })
     } catch (error: any) {
-        console.log(error.message)
+        console.log(error?.message)
         return res.status(500).json({
             message: "something went wrong"
         })

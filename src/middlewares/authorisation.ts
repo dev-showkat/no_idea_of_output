@@ -20,16 +20,16 @@ export const isAuthorized = async (req: any, res: Response, next: NextFunction) 
                 message: "user doesn't exists"
             })
         }
-        const registeredEmail  = doc.data()?.email;
+        const registeredEmail = doc.data()?.email;
         if (email !== registeredEmail) {
             return res.status(401).json({
-                message: "unauthorized"
+                message: "unauthorized:  invalid email"
             })
         }
         req.user = { id, email }
         next();
     } catch (error: any) {
-        console.log(error.message);
+        console.log(error?.message);
         return res.status(500).json({
             message: "unauthorized: invalid token"
         })

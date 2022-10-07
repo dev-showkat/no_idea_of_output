@@ -1,6 +1,8 @@
 import firebaseAdmin from "firebase-admin";
+import { exit } from "process";
 
 export const dbConfig = () => {
+  try {
     firebaseAdmin.initializeApp({
       credential: firebaseAdmin.credential.cert({
         projectId: process.env.PROJECT_ID,
@@ -8,4 +10,8 @@ export const dbConfig = () => {
         privateKey: process.env.PRIVATE_KEY
       })
     });
+  } catch (error) {
+    console.log(error);
+    exit(1);
+  }
 }
