@@ -1,9 +1,10 @@
 import path from "path";
 import { Router } from "express";
-export const userRouter = Router();
 import multer, { diskStorage } from "multer";
 import { isAuthorized } from "../middlewares/authorisation";
 import { registerUser, signinUser, updateUser, deleteUser } from "../controllers/user.controller"
+
+export const userRouter = Router();
 
 const upload = multer({
     storage: diskStorage({
